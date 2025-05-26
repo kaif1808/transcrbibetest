@@ -10,6 +10,8 @@ import sys
 from pyannote.audio import Pipeline
 import os  # For Hugging Face Token if passed directly
 
+print("--- diarisation.py script execution started (top of file) ---")  # DIAGNOSTIC PRINT
+
 
 # Helper function to format seconds into HH:MM:SS or MM:SS
 def format_time_display(seconds):
@@ -96,15 +98,15 @@ def transcribe_audio_file():
     """
     Main function to perform speaker diarization and audio transcription.
     Includes progress readouts and MPS/GPU checks with explicit MPS attempt for pyannote.
+    Whisper is forced to CPU for troubleshooting MPS issues.
     """
+    print("--- Entered transcribe_audio_file() function ---")  # DIAGNOSTIC PRINT
     # --- Configuration ---
-    audio_file = "IsabelleAudio_trimmed_test.wav"  # Recommended: Use WAV for better compatibility
-    # Or ensure FFmpeg is perfectly set up for other formats like MP4
-    model_size = "turbo"  # Whisper model size
-    language = "en"  # Language of the audio
-    output_dir = "./output/"  # Directory to save transcription files
+    audio_file = "IsabelleAudio.wav"  # Using the trimmed test file
+    model_size = "turbo"  # Using "base" model as per previous step
+    language = "en"
+    output_dir = "./output/"
     hf_token = None  # Optional: Your Hugging Face User Access Token string
-    # (Alternatively, log in via `huggingface-cli login`)
 
     overall_start_time = time.time()
 
@@ -136,8 +138,7 @@ def transcribe_audio_file():
             use_auth_token=hf_token if hf_token else True
         )
 
-        # --- Attempt to explicitly move pyannote pipeline to MPS or CUDA ---
-        if mps_available_flag:  # Prioritize MPS if both are somehow true (unlikely for same machine)
+        if mps_available_flag:
             print("MPS is available. Attempting to move pyannote pipeline to MPS device...")
             try:
                 diarization_pipeline.to(torch.device("mps"))
@@ -155,14 +156,15 @@ def transcribe_audio_file():
                 print("Proceeding with default device placement for pyannote (likely CPU).")
         else:
             print("No CUDA or MPS detected by PyTorch for explicit pipeline placement. Pyannote will use CPU.")
-        # --- End device placement attempt ---
 
         print(f"Running diarization on: {audio_file} (this may take a while)...")
-        if not Path(audio_file).exists():
-            print(f"Critical Error: Audio file '{audio_file}' not found for diarization.")
+        audio_path_obj_diar = Path(audio_file)  # Use a different variable name
+        if not audio_path_obj_diar.exists():
+            print(
+                f"Critical Error: Audio file '{audio_file}' not found for diarization at path: {audio_path_obj_diar.resolve()}")
             sys.exit(1)
 
-        diarization_result = diarization_pipeline(audio_file, num_speakers=None)
+        diarization_result = diarization_pipeline(str(audio_path_obj_diar), num_speakers=None)  # Pass path as string
 
         if diarization_result and hasattr(diarization_result, 'itertracks'):
             raw_labels = sorted(list(set([
@@ -177,7 +179,6 @@ def transcribe_audio_file():
             print(f"Diarization analysis complete. Found {len(speaker_mapping)} distinct speaker(s).")
         else:
             print("Warning: Diarization did not produce speaker tracks or a valid result.")
-            # The script will exit later if speaker_timeline remains empty.
 
     except Exception as e:
         print(f"Critical Error during speaker diarization: {e}")
@@ -206,20 +207,12 @@ def transcribe_audio_file():
     try:
         print(f"Loading Whisper model ('{model_size}')...")
 
-        # --- MODIFICATION TO FORCE WHISPER ONTO MPS DEVICE ---
-        target_device = None
-        if torch.backends.mps.is_available():
-            target_device = "mps"
-            print("MPS available, attempting to load Whisper model on MPS device.")
-        elif torch.cuda.is_available():
-            target_device = "cuda"
-            print("CUDA available, attempting to load Whisper model on CUDA device.")
-        else:
-            target_device = "cpu"
-            print("No GPU (MPS or CUDA) available, loading Whisper model on CPU.")
-
-        whisper_model = whisper.load_model(model_size, device=target_device)
+        # --- MODIFICATION: Force Whisper to CPU for debugging MPS issue ---
+        target_whisper_device = "cpu"
+        print(f"INFO: Forcing Whisper model to load on '{target_whisper_device}' device for troubleshooting.")
         # --- END MODIFICATION ---
+
+        whisper_model = whisper.load_model(model_size, device=target_whisper_device)
 
         if whisper_model:
             try:
@@ -230,24 +223,23 @@ def transcribe_audio_file():
                 elif "cuda" in model_device:
                     print("✓ Whisper is utilizing CUDA for acceleration.")
                 elif "cpu" in model_device:
-                    print("✓ Whisper is running on CPU.")
+                    print(f"✓ Whisper is running on {model_device} as intended for this test.")
             except Exception as e:
                 print(f"Could not determine Whisper model device: {e}")
         else:
-            # This case should ideally not be reached if load_model errors,
-            # but as a fallback:
             print("Critical Error: Whisper model could not be loaded.")
             sys.exit(1)
 
-        audio_path = Path(audio_file)  # audio_file should be defined earlier in your script
-        if not audio_path.exists():
-            print(f"Critical Error: Audio file '{audio_file}' not found for transcription.")
+        audio_path_obj_trans = Path(audio_file)  # Use a different variable name
+        if not audio_path_obj_trans.exists():
+            print(
+                f"Critical Error: Audio file '{audio_file}' not found for transcription at path: {audio_path_obj_trans.resolve()}")
             sys.exit(1)
 
         print(f"Starting transcription of: {audio_file}")
         result = whisper_model.transcribe(
-            str(audio_path),
-            language=language,  # language should be defined earlier
+            str(audio_path_obj_trans),  # Pass path as string
+            language=language,
             verbose=False,
             fp16=False
         )
@@ -259,16 +251,24 @@ def transcribe_audio_file():
     finally:
         transcription_elapsed_time = time.time() - transcription_step_start_time
         print(f"\nTranscription (Step 2) processing time: {format_time_display(transcription_elapsed_time)}.")
+
     # --- Post-processing and Saving ---
     print("\n--- Post-processing and Saving Results ---")
-    if "segments" in result and result["segments"]:
+    # Ensure 'result' is defined; it would be if try block for transcription completed.
+    # If an error happened before 'result' was assigned, this part might not be reached due to sys.exit().
+    if 'result' not in locals() or result is None:
+        print("Error: Transcription result is missing. Cannot save output.")
+        # This case should ideally be prevented by sys.exit() in the try-except block,
+        # but adding a check here for robustness before accessing result["segments"] or result["text"]
+    elif "segments" in result and result["segments"]:
         print("Assigning speaker labels to transcript segments...")
         result["segments"] = assign_speakers_to_segments(result["segments"], speaker_timeline)
     else:
         print("No text segments found in transcription result. Output might be minimal.")
 
     Path(output_dir).mkdir(parents=True, exist_ok=True)
-    save_transcription_files(result, Path(audio_file).stem, output_dir)
+    if 'result' in locals() and result is not None:  # Only save if result exists
+        save_transcription_files(result, Path(audio_file).stem, output_dir)
 
     overall_elapsed_time = time.time() - overall_start_time
     print(f"\n--- All processing finished in {format_time_display(overall_elapsed_time)} ---")
@@ -321,4 +321,7 @@ def save_transcription_files(result, base_filename, output_dir):
 
 
 if __name__ == "__main__":
+    print("--- In __main__ block, preparing to call transcribe_audio_file() ---")  # DIAGNOSTIC PRINT
     transcribe_audio_file()
+    print("--- transcribe_audio_file() call completed ---")  # DIAGNOSTIC PRINT
+    print("--- diarisation.py script execution finished (end of file) ---")  # DIAGNOSTIC PRINT
