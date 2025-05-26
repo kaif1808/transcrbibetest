@@ -7,7 +7,7 @@ from pyannote.audio import Pipeline
 import os
 
 # --- Hugging Face Transformers imports ---
-from transformers import pipeline
+from transformers import pipeline, WhisperProcessor, WhisperForConditionalGeneration
 
 print("--- diarisation_hf_turbo.py script execution started (top of file) ---")
 
