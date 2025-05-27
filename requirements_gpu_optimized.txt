@@ -1,0 +1,40 @@
+# GPU-Optimized Transcription Requirements
+# Clean approach using Whisper CLI and compatible libraries
+
+# Core audio processing
+soundfile>=0.12.1
+numpy>=1.24.0
+
+# Whisper CLI (main transcription engine)
+openai-whisper>=20231117
+
+# Speaker diarization
+pyannote.audio>=3.1.0
+torch>=2.0.0
+torchaudio>=2.0.0
+
+# Audio processing utilities
+ffmpeg-python>=0.2.0
+
+# Async and parallel processing
+asyncio-throttle>=1.0.2
+
+# Optional: GPU acceleration for PyTorch
+# Uncomment based on your system:
+# For NVIDIA GPUs:
+# torch>=2.0.0+cu118 --index-url https://download.pytorch.org/whl/cu118
+# torchaudio>=2.0.0+cu118 --index-url https://download.pytorch.org/whl/cu118
+
+# For Apple Silicon (MPS):
+ torch>=2.0.0
+ torchaudio>=2.0.0
+
+# System requirements:
+# - FFmpeg installed system-wide
+# - CUDA toolkit (for NVIDIA GPUs)
+# - Sufficient GPU memory (8GB+ recommended)
+
+# Installation notes:
+# 1. Install FFmpeg: brew install ffmpeg (macOS) or apt install ffmpeg (Ubuntu)
+# 2. For NVIDIA GPUs, install CUDA toolkit from NVIDIA
+# 3. For Hugging Face models, you may need: huggingface_hub[cli] 

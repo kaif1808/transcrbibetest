@@ -1,0 +1,37 @@
+# Lightning Whisper MLX Requirements
+# Ultra-fast transcription for Apple Silicon M1 Max
+
+# Core Lightning MLX framework
+lightning-whisper-mlx>=0.0.10
+
+# MLX backend for Apple Silicon
+mlx>=0.25.0
+
+# Audio processing
+soundfile>=0.13.0
+librosa>=0.10.0
+
+# PyTorch for MPS diarization
+torch>=2.0.0
+torchaudio>=2.0.0
+
+# Speaker diarization
+pyannote.audio>=3.0.0
+
+# Utility libraries
+numpy>=1.24.0
+scipy>=1.10.0
+tqdm>=4.65.0
+requests>=2.31.0
+
+# JSON and data handling
+huggingface-hub>=0.16.0
+
+# System utilities
+psutil>=5.9.0
+
+# Optional: Enhanced tokenization
+tiktoken==0.3.3
+
+# Audio conversion
+ffmpeg-python>=0.2.0 

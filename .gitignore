@@ -1,0 +1,53 @@
+# Lightning MLX Models (large files - download locally)
+mlx_models/
+*.npz
+*.safetensors
+
+# Audio files (large files)
+*.wav
+*.mp3
+*.m4a
+*.flac
+
+# Output directories
+output*/
+lightning_mlx_chunks_*/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+
+# Virtual environment
+.venv/
+venv/
+env/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# PyCharm
+.idea/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# Benchmark results
+*_benchmark_*.json
+*_test_result.json
+
+# Temporary files
+*.tmp
+*.temp
+dummy_*
+
+# Logs
+*.log
+
+# Cache directories
+.cache/ 
