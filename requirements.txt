@@ -1,0 +1,96 @@
+# Audio Transcription System Requirements
+# Comprehensive requirements for Lightning MLX transcription, diarization, and analysis
+# Tested on Apple Silicon M1 Max with Python 3.11+
+
+# ===== CORE TRANSCRIPTION & MLX =====
+lightning-whisper-mlx>=0.0.10
+mlx>=0.25.0
+mlx-lm>=0.24.0
+
+# ===== AUDIO PROCESSING =====
+soundfile>=0.13.0
+librosa>=0.11.0
+ffmpeg-python>=0.2.0
+
+# ===== SPEAKER DIARIZATION =====
+pyannote.audio>=3.3.0
+torch>=2.7.0
+torchaudio>=2.7.0
+speechbrain>=1.0.0
+
+# ===== NLP & LANGUAGE PROCESSING =====
+spacy>=3.8.0
+transformers>=4.52.0
+nltk>=3.9.0
+sentencepiece>=0.2.0
+tokenizers>=0.21.0
+sentence-transformers>=4.1.0
+
+# ===== TEXT CORRECTION & ENHANCEMENT =====
+language-tool-python>=2.9.0
+python-Levenshtein>=0.27.0
+textdistance>=4.6.0
+pyspellchecker>=0.8.0
+autocorrect>=2.6.0
+regex>=2024.11.0
+
+# ===== DOCUMENT PROCESSING =====
+python-docx>=1.1.2
+python-dateutil>=2.9.0
+
+# ===== MACHINE LEARNING & AI =====
+accelerate>=1.7.0
+datasets>=3.6.0
+huggingface-hub>=0.32.0
+tiktoken>=0.3.3
+
+# ===== LOCAL LLM SUPPORT =====
+ollama>=0.4.8
+
+# ===== DATA PROCESSING & ANALYSIS =====
+numpy>=2.2.0
+pandas>=2.2.0
+scipy>=1.15.0
+scikit-learn>=1.6.0
+
+# ===== CONTEXT ANALYSIS =====
+networkx>=3.4.0
+textblob>=0.19.0
+matplotlib>=3.10.0
+seaborn>=0.13.0
+
+# ===== ASYNC & PARALLEL PROCESSING =====
+asyncio-throttle>=1.0.2
+aiofiles>=24.1.0
+httpx>=0.28.0
+
+# ===== UTILITIES & INTERFACES =====
+tqdm>=4.67.0
+rich>=14.0.0
+colorlog>=6.9.0
+typer>=0.16.0
+pydantic>=2.11.0
+
+# ===== PERFORMANCE MONITORING =====
+psutil>=7.0.0
+memory-profiler>=0.61.0
+
+# ===== DATA SERIALIZATION =====
+orjson>=3.10.0
+requests>=2.32.0
+
+# ===== DEVELOPMENT & TESTING =====
+pytest>=8.0.0
+pytest-asyncio>=0.23.0
+
+# ===== POST-INSTALLATION COMMANDS =====
+# After pip install -r requirements.txt, run:
+#   python -m spacy download en_core_web_sm
+#   python -m nltk.downloader punkt wordnet averaged_perceptron_tagger
+#
+# For Ollama LLM setup:
+#   1. Install Ollama: https://ollama.ai/
+#   2. Pull model: ollama pull llama3.2:latest
+#
+# For HuggingFace authentication (optional):
+#   huggingface-cli login 

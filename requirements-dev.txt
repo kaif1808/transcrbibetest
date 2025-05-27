@@ -1,0 +1,52 @@
+# Development Requirements
+# Optional dependencies for development, testing, and advanced features
+
+# ===== DEVELOPMENT TOOLS =====
+black>=24.0.0
+flake8>=7.0.0
+mypy>=1.8.0
+pre-commit>=3.6.0
+
+# ===== TESTING =====
+pytest>=8.0.0
+pytest-asyncio>=0.23.0
+pytest-cov>=4.0.0
+pytest-mock>=3.12.0
+
+# ===== JUPYTER & NOTEBOOKS =====
+jupyter>=1.0.0
+ipykernel>=6.29.0
+matplotlib>=3.10.0
+
+# ===== ADVANCED VISUALIZATION =====
+plotly>=5.17.0
+bokeh>=3.3.0
+
+# ===== PROFILING & DEBUGGING =====
+memory-profiler>=0.61.0
+line-profiler>=4.1.0
+py-spy>=0.3.0
+
+# ===== OPTIONAL NLP ENHANCEMENTS =====
+gensim>=4.3.0          # For LDA topic modeling
+pyLDAvis>=3.4.0        # For topic visualization
+wordcloud>=1.9.0       # For word cloud generation
+
+# ===== GPU MONITORING =====
+nvidia-ml-py>=12.560.30   # For NVIDIA GPU monitoring
+gpustat>=1.1.1             # GPU monitoring CLI
+
+# ===== DOCUMENTATION =====
+sphinx>=7.2.0
+sphinx-rtd-theme>=2.0.0
+myst-parser>=2.0.0
+
+# ===== API & WEB INTERFACES =====
+fastapi>=0.110.0
+uvicorn>=0.27.0
+gradio>=4.15.0
+
+# ===== ADVANCED AUDIO PROCESSING =====
+audioread>=3.0.1
+pyrubberband>=0.3.0
+noisereduce>=3.0.0 

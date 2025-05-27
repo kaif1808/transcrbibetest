@@ -82,10 +82,10 @@ class NounExtractionConfig:
     """Configuration for noun extraction process"""
     domain_focus: str = "general"
     extract_phrases: bool = True
-    use_local_llm: bool = False
+    use_local_llm: bool = True
     llm_provider: str = "ollama"  # "ollama" or "mlx-lm"
     llm_model: str = "llama3.2:latest"
-    extract_unusual_nouns: bool = False
+    extract_unusual_nouns: bool = True
     use_gpu_acceleration: bool = True
     gpu_batch_size: int = 64
     parallel_processing: bool = True
@@ -202,20 +202,20 @@ class DocumentNounExtractor:
                 text=noun_text,
                 frequency=frequency,
                 confidence=confidence,
-                contexts=contexts
+                contexts=contexts,
+                domain=self.config.domain_focus
             )
             
-            # Categorize
-            if noun_text.istitle() or noun_text.isupper():
-                extracted_noun.category = "proper_noun"
-                results["proper_nouns"].append(extracted_noun)
-            elif self._is_domain_specific(noun_text):
+            # Categorize the noun
+            if self._is_domain_specific(noun_text):
                 extracted_noun.category = "domain_specific"
-                extracted_noun.domain = self.config.domain_focus
                 results["domain_specific"].append(extracted_noun)
             elif self._is_technical_term(noun_text):
                 extracted_noun.category = "technical"
                 results["technical_terms"].append(extracted_noun)
+            elif any(token.pos_ == "PROPN" for token in doc if token.text.lower() == noun_text):
+                extracted_noun.category = "proper_noun"
+                results["proper_nouns"].append(extracted_noun)
             elif len(noun_text.split()) > 1:
                 extracted_noun.category = "phrase"
                 extracted_noun.is_phrase = True
@@ -224,17 +224,14 @@ class DocumentNounExtractor:
                 extracted_noun.category = "common"
                 results["common_nouns"].append(extracted_noun)
             
+            # Add to all_nouns
             results["all_nouns"].append(extracted_noun)
         
-        # LLM enhancement for unusual nouns
-        if self.config.use_local_llm and self.config.extract_unusual_nouns:
+        # Extract unusual nouns with LLM if enabled
+        if self.config.extract_unusual_nouns and self.config.use_local_llm:
             unusual_nouns = await self._extract_unusual_nouns_with_llm(text)
-            results["unusual_nouns"] = unusual_nouns
+            results["unusual_nouns"].extend(unusual_nouns)
             results["all_nouns"].extend(unusual_nouns)
-        
-        # Sort by frequency and confidence
-        for category in results:
-            results[category].sort(key=lambda x: (x.frequency, x.confidence), reverse=True)
         
         return results
     
@@ -290,7 +287,7 @@ class DocumentNounExtractor:
             Analyze the following text and identify unusual, domain-specific, or technical nouns that might be important for {self.config.domain_focus}. 
             Return only the nouns, one per line, without explanations.
             
-            Text: {text[:1000]}  # Limit text length
+            Text: {text[:1000]}
             
             Unusual nouns:
             """
@@ -314,7 +311,7 @@ class DocumentNounExtractor:
                         unusual_nouns.append(extracted_noun)
                 
                 return unusual_nouns[:10]  # Limit to top 10
-        
+            
         except Exception as e:
             logger.warning(f"Ollama extraction failed: {e}")
         

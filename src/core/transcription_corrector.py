@@ -166,9 +166,13 @@ class TranscriptionCorrector:
         self.grammar_corrector = None
         self.word_frequency = Counter()
         self.speaker_vocabulary = defaultdict(set)
+        self._initialized = False
         
-        # Initialize language models
-        asyncio.create_task(self._initialize_models())
+    async def initialize(self):
+        """Initialize language models explicitly"""
+        if not self._initialized:
+            await self._initialize_models()
+            self._initialized = True
     
     async def _initialize_models(self):
         """Initialize language processing models"""
@@ -207,12 +211,31 @@ class TranscriptionCorrector:
         """Check if GPU is available"""
         try:
             import torch
-            return torch.cuda.is_available() or torch.backends.mps.is_available()
+            # Check CUDA availability with error handling
+            cuda_available = False
+            try:
+                cuda_available = torch.cuda.is_available()
+            except Exception as e:
+                logger.debug(f"CUDA check failed: {e}")
+            
+            # Check MPS availability with error handling
+            mps_available = False
+            try:
+                mps_available = torch.backends.mps.is_available()
+            except Exception as e:
+                logger.debug(f"MPS check failed: {e}")
+            
+            return cuda_available or mps_available
         except ImportError:
+            logger.debug("PyTorch not available for GPU detection")
             return False
     
     async def correct_transcription(self, result: Dict[str, Any]) -> Dict[str, Any]:
         """Main correction pipeline for transcription results"""
+        # Ensure models are initialized
+        if not self._initialized:
+            await self.initialize()
+            
         print("🔧 Starting transcription correction...")
         start_time = time.time()
         

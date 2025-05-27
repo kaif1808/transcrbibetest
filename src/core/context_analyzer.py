@@ -22,7 +22,6 @@ import logging
 # Core NLP and analysis imports
 try:
     import spacy
-    from spacy import displacy
     SPACY_AVAILABLE = True
 except ImportError:
     SPACY_AVAILABLE = False

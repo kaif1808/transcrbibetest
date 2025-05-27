@@ -17,17 +17,23 @@ data/input/inputdoc.docx
 
 # Output directories
 output*/
+output_*/
 lightning_mlx_chunks_*/
 
 # Results and test outputs
-results/reports/
-results/test_outputs/
+results/
 reports/
 test_outputs/
 
-# Test reports and generated files
+# Generated reports and analysis files
 *_test_report_*.json
+*_analysis_*.json
+*_summary_*.json
+*_benchmark_*.json
 context_analysis_test_report_*.json
+pipeline_execution_summary.md
+complete_system_performance_summary.md
+pipeline_build_status.json
 
 # Python cache
 __pycache__/
@@ -53,17 +59,24 @@ env/
 # Jupyter Notebook
 .ipynb_checkpoints
 
-# Benchmark results
-*_benchmark_*.json
-*_test_result.json
-
 # Temporary files
 *.tmp
 *.temp
 dummy_*
+*.log.*
+lightning_mlx_benchmark_*.json
 
 # Logs
 *.log
 
 # Cache directories
 .cache/ 
+# Test Results Archive
+results/successful_tests/
+tests/archive/
+
+# Temporary test outputs
+*_optimized_*.json
+batch_summary_*.json
+system_diagnostics.json
+timing_diagnostics.json

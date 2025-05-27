@@ -18,7 +18,7 @@ import logging
 
 # Import transcription correction
 try:
-    from transcription_corrector import enhance_transcription_result, create_correction_config
+    from .transcription_corrector import enhance_transcription_result, create_correction_config
     CORRECTION_AVAILABLE = True
     print("✅ Transcription correction module available")
 except ImportError:
@@ -27,7 +27,7 @@ except ImportError:
 
 # Import noun extraction
 try:
-    from noun_extraction_system import extract_nouns_from_transcription, save_noun_analysis
+    from .noun_extraction_system import extract_nouns_from_transcription, save_noun_analysis
     NOUN_EXTRACTION_AVAILABLE = True
     print("✅ Noun extraction module available")
 except ImportError:
@@ -89,6 +89,20 @@ class LightningMLXProcessor:
         self.config = config
         self.whisper = None
         self.model_info = None
+        self._initialized = False
+        
+    async def cleanup(self):
+        """Clean up resources"""
+        if self.whisper:
+            try:
+                # Attempt to free MLX resources if possible
+                del self.whisper
+                self.whisper = None
+                print("🧹 Lightning MLX resources cleaned up")
+            except Exception as e:
+                logger.warning(f"Cleanup warning: {e}")
+        
+        self._initialized = False
         
     async def initialize(self):
         """Initialize Lightning Whisper MLX model"""
@@ -101,44 +115,69 @@ class LightningMLXProcessor:
             print(f"🔢 Batch size: {self.config.batch_size}")
             print(f"⚡ Quantization: {self.config.quant}")
             
-            # Check MLX availability
-            print(f"💻 MLX backend available: {mx.default_device()}")
+            # Check MLX availability with proper error handling
+            try:
+                device = mx.default_device()
+                print(f"💻 MLX backend available: {device}")
+            except Exception as e:
+                raise RuntimeError(f"MLX backend not available: {e}")
             
             init_start = time.time()
             
-            # Initialize with simple settings for compatibility
+            # Store original config for fallback reference
+            original_model = self.config.model
+            original_batch_size = self.config.batch_size
+            
+            # Initialize with original settings
             try:
                 self.whisper = LightningWhisperMLX(
                     model=self.config.model,
                     batch_size=self.config.batch_size,
                     quant=self.config.quant
                 )
+                print(f"✅ Initialized with requested config: {original_model}, batch_size={original_batch_size}")
+                
             except Exception as e:
-                print(f"⚠️  Failed with original config, trying minimal config: {e}")
-                # Fallback to minimal configuration
-                self.whisper = LightningWhisperMLX(
-                    model="tiny",
-                    batch_size=1,
-                    quant=None
-                )
-                self.config.model = "tiny"
-                self.config.batch_size = 1
+                print(f"⚠️ Failed with original config: {e}")
+                print(f"🔄 Attempting fallback to minimal configuration...")
+                
+                # Fallback to minimal configuration without modifying original config
+                try:
+                    self.whisper = LightningWhisperMLX(
+                        model="tiny",
+                        batch_size=1,
+                        quant=None
+                    )
+                    print(f"✅ Fallback successful: tiny model, batch_size=1")
+                    print(f"ℹ️ Note: Using fallback config instead of requested {original_model}")
+                    
+                except Exception as fallback_error:
+                    raise RuntimeError(f"Both original and fallback initialization failed. Original: {e}, Fallback: {fallback_error}")
             
             init_time = time.time() - init_start
             
+            # Determine actual model info (may be different from config if fallback was used)
+            actual_model = "tiny" if original_model != "tiny" and hasattr(self.whisper, '_model_name') else self.config.model
+            actual_batch_size = 1 if original_batch_size != 1 and actual_model == "tiny" else self.config.batch_size
+            
             self.model_info = {
-                "model": self.config.model,
-                "batch_size": self.config.batch_size,
+                "requested_model": original_model,
+                "actual_model": actual_model,
+                "requested_batch_size": original_batch_size,
+                "actual_batch_size": actual_batch_size,
                 "quantization": self.config.quant,
-                "device": str(mx.default_device()),
-                "init_time": init_time
+                "device": str(device),
+                "init_time": init_time,
+                "fallback_used": actual_model != original_model
             }
             
             print(f"✅ Lightning MLX initialized in {init_time:.2f}s")
-            print(f"🖥️  Device: {mx.default_device()}")
+            print(f"🖥️  Device: {device}")
             
             # Skip warmup for now to avoid compatibility issues
             print("⚡ Skipping warmup due to compatibility mode")
+            
+            self._initialized = True
             
         except ImportError as e:
             raise ImportError(f"Lightning Whisper MLX not available: {e}")
@@ -315,6 +354,7 @@ class LightningMLXDiarizer:
     async def initialize(self):
         """Initialize diarization pipeline"""
         if not self.config.use_diarization:
+            logger.info("Diarization disabled in configuration")
             return
             
         try:
@@ -323,35 +363,65 @@ class LightningMLXDiarizer:
             
             print("🎤 Initializing speaker diarization...")
             
-            self.pipeline = Pipeline.from_pretrained(
-                "pyannote/speaker-diarization-3.1",
-                use_auth_token=True
-            )
+            # Try to load pipeline with proper error handling
+            try:
+                self.pipeline = Pipeline.from_pretrained(
+                    "pyannote/speaker-diarization-3.1",
+                    use_auth_token=True
+                )
+                print("✅ Diarization pipeline loaded successfully")
+                
+            except Exception as auth_error:
+                if "authentication" in str(auth_error).lower() or "token" in str(auth_error).lower():
+                    logger.error("❌ Diarization failed: HuggingFace authentication required")
+                    logger.error("   Please set up authentication: huggingface-cli login")
+                    logger.error("   Or provide auth token in environment: HF_TOKEN=your_token")
+                else:
+                    logger.error(f"❌ Diarization pipeline load failed: {auth_error}")
+                
+                self.pipeline = None
+                return
             
-            # MLX + PyTorch MPS optimization
-            if torch.backends.mps.is_available():
-                try:
+            # Device optimization with error handling
+            try:
+                if torch.backends.mps.is_available():
                     device = torch.device("mps")
                     self.pipeline.to(device)
                     print("✅ Diarization using Apple Silicon MPS")
-                except Exception as e:
-                    print(f"⚠️  MPS failed, using CPU: {e}")
-            else:
-                print("ℹ️  Diarization using CPU")
+                elif torch.cuda.is_available():
+                    device = torch.device("cuda")
+                    self.pipeline.to(device)
+                    print("✅ Diarization using CUDA GPU")
+                else:
+                    print("ℹ️ Diarization using CPU")
+                    
+            except Exception as device_error:
+                logger.warning(f"⚠️ GPU setup failed, using CPU: {device_error}")
                 
+        except ImportError as e:
+            logger.error(f"❌ Diarization dependencies missing: {e}")
+            logger.error("   Install with: pip install pyannote.audio torch")
+            self.pipeline = None
         except Exception as e:
-            logger.warning(f"Diarization initialization failed: {e}")
+            logger.error(f"❌ Diarization initialization failed: {e}")
             self.pipeline = None
     
     async def process(self, audio_file: str) -> List[Tuple[str, float, float]]:
         """Process speaker diarization"""
         if not self.pipeline:
+            logger.warning("⚠️ Diarization pipeline not available, skipping speaker identification")
             return []
         
         try:
             print("🎤 Processing speaker diarization...")
             diarization_start = time.time()
             
+            # Validate audio file
+            if not Path(audio_file).exists():
+                logger.error(f"❌ Audio file not found: {audio_file}")
+                return []
+            
+            # Run diarization with progress indication
             diarization = self.pipeline(
                 audio_file,
                 min_speakers=self.config.min_speakers,
@@ -363,13 +433,20 @@ class LightningMLXDiarizer:
                 timeline.append((speaker, turn.start, turn.end))
             
             diarization_time = time.time() - diarization_start
-            print(f"✅ Diarization completed in {diarization_time:.2f}s")
-            print(f"🎤 Detected {len(set(s[0] for s in timeline))} speakers")
+            speaker_count = len(set(s[0] for s in timeline))
+            
+            if timeline:
+                print(f"✅ Diarization completed in {diarization_time:.2f}s")
+                print(f"🎤 Detected {speaker_count} speakers with {len(timeline)} speaking turns")
+            else:
+                logger.warning("⚠️ No speakers detected in audio file")
             
             return timeline
             
         except Exception as e:
-            logger.error(f"Diarization failed: {e}")
+            logger.error(f"❌ Diarization processing failed: {e}")
+            logger.error(f"   Audio file: {audio_file}")
+            logger.error(f"   Config: min_speakers={self.config.min_speakers}, max_speakers={self.config.max_speakers}")
             return []
 
 
@@ -450,14 +527,28 @@ class LightningMLXResultProcessor:
     @staticmethod
     async def extract_nouns(result: Dict[str, Any], config: LightningMLXConfig) -> Dict[str, Any]:
         """Extract nouns from transcription result if enabled"""
-        if not config.enable_noun_extraction or not NOUN_EXTRACTION_AVAILABLE:
+        if not config.enable_noun_extraction:
+            logger.debug("Noun extraction disabled in configuration")
+            return result
+            
+        if not NOUN_EXTRACTION_AVAILABLE:
+            logger.warning("⚠️ Noun extraction not available - module not found")
+            result["noun_extraction_status"] = "unavailable"
             return result
         
         try:
             print("🔍 Extracting nouns and phrases from transcription...")
             
+            # Import with error handling
+            try:
+                from .noun_extraction_system import NounExtractionConfig, extract_nouns_from_transcription
+            except ImportError as import_error:
+                logger.error(f"❌ Failed to import noun extraction: {import_error}")
+                result["noun_extraction_status"] = "import_failed"
+                result["noun_extraction_error"] = str(import_error)
+                return result
+            
             # Create enhanced configuration for noun extraction
-            from noun_extraction_system import NounExtractionConfig
             extraction_config = NounExtractionConfig(
                 domain_focus=config.noun_extraction_domain,
                 extract_phrases=config.extract_phrases,
@@ -467,8 +558,8 @@ class LightningMLXResultProcessor:
                 max_workers=4,
                 min_phrase_length=2,
                 max_phrase_length=8,
-                use_local_llm=True,
-                extract_unusual_nouns=True
+                use_local_llm=False,  # Disable LLM for reliability
+                extract_unusual_nouns=False
             )
             
             # Extract nouns from the transcription
@@ -478,39 +569,45 @@ class LightningMLXResultProcessor:
                 config=extraction_config
             )
             
+            # Check for extraction errors
+            if "error" in noun_analysis:
+                logger.error(f"❌ Noun extraction failed: {noun_analysis['error']}")
+                result["noun_extraction_status"] = "failed"
+                result["noun_extraction_error"] = noun_analysis["error"]
+                return result
+            
             # Add noun analysis to result
             result["noun_analysis"] = noun_analysis
+            result["noun_extraction_status"] = "success"
             
             # Summary of extracted nouns and phrases
-            full_analysis = noun_analysis.get("full_text_analysis", {})
-            total_nouns = len(full_analysis.get("all_nouns", []))
-            phrase_entities = len(full_analysis.get("phrase_entities", []))
-            org_phrases = len(full_analysis.get("organizational_phrases", []))
-            named_entities = len(full_analysis.get("named_entities", []))
-            technical_terms = len(full_analysis.get("technical_terms", []))
-            unusual_nouns = len(full_analysis.get("unusual_nouns", []))
+            noun_data = noun_analysis.get("noun_analysis", {})
+            total_nouns = len(noun_data.get("all_nouns", []))
             
-            print(f"✅ Enhanced noun and phrase extraction completed:")
-            print(f"   📝 Total nouns: {total_nouns}")
-            print(f"   👥 Multi-word phrases: {phrase_entities}")
-            print(f"   🏛️  Organizational phrases: {org_phrases}")
-            print(f"   👤 Named entities: {named_entities}")
-            print(f"   🔧 Technical terms: {technical_terms}")
-            print(f"   🌟 Unusual terms (LLM): {unusual_nouns}")
+            print(f"✅ Noun extraction completed successfully:")
+            print(f"   📝 Total nouns found: {total_nouns}")
             
-            # Show some example phrases if available
-            if phrase_entities > 0:
-                example_phrases = [noun.text for noun in full_analysis.get("phrase_entities", [])[:3]]
-                print(f"   💡 Example phrases: {', '.join(example_phrases)}")
-            
-            if org_phrases > 0:
-                example_orgs = [noun.text for noun in full_analysis.get("organizational_phrases", [])[:2]]
-                print(f"   🏢 Example organizations: {', '.join(example_orgs)}")
+            # Count by category
+            for category, nouns in noun_data.items():
+                if nouns and category != "all_nouns":
+                    count = len(nouns)
+                    category_name = category.replace('_', ' ').title()
+                    print(f"   {category_name}: {count}")
+                    
+                    # Show examples for key categories
+                    if category in ["technical_terms", "domain_specific"] and count > 0:
+                        examples = [noun["text"] if isinstance(noun, dict) else noun.text for noun in nouns[:3]]
+                        print(f"      Examples: {', '.join(examples)}")
             
             return result
             
         except Exception as e:
-            logger.warning(f"Noun extraction failed: {e}")
+            logger.error(f"❌ Noun extraction failed with exception: {e}")
+            import traceback
+            logger.debug(f"Noun extraction traceback: {traceback.format_exc()}")
+            
+            result["noun_extraction_status"] = "exception"
+            result["noun_extraction_error"] = str(e)
             return result
 
 
@@ -772,11 +869,25 @@ class LightningMLXBenchmark:
                             result["segments"], speaker_timeline
                         )
                 
-                # Cleanup chunks
-                for chunk_file, _, _ in chunks:
-                    Path(chunk_file).unlink(missing_ok=True)
-                if chunks and len(chunks) > 1:
-                    Path(chunks[0][0]).parent.rmdir()
+                # Cleanup chunks with proper error handling
+                try:
+                    for chunk_file, _, _ in chunks:
+                        chunk_path = Path(chunk_file)
+                        if chunk_path.exists():
+                            chunk_path.unlink()
+                    
+                    # Remove temp directory if it exists and is empty
+                    if chunks and len(chunks) > 1:
+                        temp_dir = Path(chunks[0][0]).parent
+                        if temp_dir.exists() and temp_dir.name.startswith("lightning_mlx_chunks_"):
+                            try:
+                                temp_dir.rmdir()
+                                print(f"🧹 Cleaned up temporary directory: {temp_dir}")
+                            except OSError:
+                                logger.warning(f"Could not remove temp directory: {temp_dir}")
+                                
+                except Exception as cleanup_error:
+                    logger.warning(f"Chunk cleanup failed: {cleanup_error}")
             
             total_time = time.time() - overall_start
             
