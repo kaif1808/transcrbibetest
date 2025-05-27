@@ -19,6 +19,12 @@ data/input/inputdoc.docx
 output*/
 lightning_mlx_chunks_*/
 
+# Results and test outputs
+results/reports/
+results/test_outputs/
+reports/
+test_outputs/
+
 # Test reports and generated files
 *_test_report_*.json
 context_analysis_test_report_*.json
