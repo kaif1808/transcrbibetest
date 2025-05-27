@@ -84,7 +84,7 @@ class NounExtractionConfig:
     extract_phrases: bool = True
     use_local_llm: bool = False
     llm_provider: str = "ollama"  # "ollama" or "mlx-lm"
-    llm_model: str = "llama3.2"
+    llm_model: str = "llama3.2:latest"
     extract_unusual_nouns: bool = False
     use_gpu_acceleration: bool = True
     gpu_batch_size: int = 64
