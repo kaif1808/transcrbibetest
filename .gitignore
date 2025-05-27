@@ -9,9 +9,19 @@ mlx_models/
 *.m4a
 *.flac
 
+# Document files (exclude specific documents)
+inputdoc.docx
+data/input/inputdoc.docx
+
+# Note: noun_extraction_system.py is included in the repository
+
 # Output directories
 output*/
 lightning_mlx_chunks_*/
+
+# Test reports and generated files
+*_test_report_*.json
+context_analysis_test_report_*.json
 
 # Python cache
 __pycache__/

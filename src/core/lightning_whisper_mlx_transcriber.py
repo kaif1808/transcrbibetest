@@ -16,6 +16,24 @@ import soundfile as sf
 from dataclasses import dataclass
 import logging
 
+# Import transcription correction
+try:
+    from transcription_corrector import enhance_transcription_result, create_correction_config
+    CORRECTION_AVAILABLE = True
+    print("✅ Transcription correction module available")
+except ImportError:
+    CORRECTION_AVAILABLE = False
+    print("⚠️  Transcription correction not available. Install with: pip install -r requirements_correction.txt")
+
+# Import noun extraction
+try:
+    from noun_extraction_system import extract_nouns_from_transcription, save_noun_analysis
+    NOUN_EXTRACTION_AVAILABLE = True
+    print("✅ Noun extraction module available")
+except ImportError:
+    NOUN_EXTRACTION_AVAILABLE = False
+    print("⚠️  Noun extraction not available. Install with: pip install -r requirements_correction.txt")
+
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -27,7 +45,7 @@ class LightningMLXConfig:
     output_dir: str = "./output_lightning_mlx/"
     
     # Lightning MLX specific settings
-    model: str = "distil-large-v3"  # Simple base model for compatibility
+    model: str = "distil-large-v3"  # High-quality distilled model for testing
     batch_size: int = 12  # Default recommended batch size
     quant: Optional[str] = None  # Disable quantization for compatibility
     
@@ -43,6 +61,16 @@ class LightningMLXConfig:
     use_diarization: bool = True
     min_speakers: int = 1
     max_speakers: int = 8
+    
+    # Transcription correction settings
+    enable_correction: bool = True
+    correction_domain: str = "education"  # education, technology, business, general
+    
+    # Noun extraction settings
+    enable_noun_extraction: bool = True
+    noun_extraction_domain: str = "education"  # education, technology, business, general
+    extract_phrases: bool = True  # Enable multi-word phrase extraction
+    use_gpu_for_extraction: bool = True  # Use GPU acceleration for noun extraction
     
     def __post_init__(self):
         if self.available_models is None:
@@ -391,6 +419,99 @@ class LightningMLXResultProcessor:
             segment["speaker"] = assigned_speaker
         
         return segments
+    
+    @staticmethod
+    async def apply_corrections(result: Dict[str, Any], config: LightningMLXConfig) -> Dict[str, Any]:
+        """Apply transcription corrections if enabled"""
+        if not config.enable_correction or not CORRECTION_AVAILABLE:
+            return result
+        
+        try:
+            print("🔧 Applying transcription corrections...")
+            
+            # Create correction configuration
+            correction_config = create_correction_config(
+                domain=config.correction_domain,
+                enable_ai=True,
+                custom_terms=["Lightning MLX", "M1 Max", "Apple Silicon", "TVET", "Vietnam", "Vietnamese"]
+            )
+            
+            # Apply corrections
+            corrected_result = await enhance_transcription_result(result, correction_config)
+            
+            print(f"✅ Corrections applied: {corrected_result.get('correction_info', {}).get('corrections_applied', [])}")
+            
+            return corrected_result
+            
+        except Exception as e:
+            logger.warning(f"Correction failed: {e}")
+            return result
+    
+    @staticmethod
+    async def extract_nouns(result: Dict[str, Any], config: LightningMLXConfig) -> Dict[str, Any]:
+        """Extract nouns from transcription result if enabled"""
+        if not config.enable_noun_extraction or not NOUN_EXTRACTION_AVAILABLE:
+            return result
+        
+        try:
+            print("🔍 Extracting nouns and phrases from transcription...")
+            
+            # Create enhanced configuration for noun extraction
+            from noun_extraction_system import NounExtractionConfig
+            extraction_config = NounExtractionConfig(
+                domain_focus=config.noun_extraction_domain,
+                extract_phrases=config.extract_phrases,
+                use_gpu_acceleration=config.use_gpu_for_extraction,
+                gpu_batch_size=64,
+                parallel_processing=True,
+                max_workers=4,
+                min_phrase_length=2,
+                max_phrase_length=8,
+                use_local_llm=True,
+                extract_unusual_nouns=True
+            )
+            
+            # Extract nouns from the transcription
+            noun_analysis = await extract_nouns_from_transcription(
+                result, 
+                domain=config.noun_extraction_domain,
+                config=extraction_config
+            )
+            
+            # Add noun analysis to result
+            result["noun_analysis"] = noun_analysis
+            
+            # Summary of extracted nouns and phrases
+            full_analysis = noun_analysis.get("full_text_analysis", {})
+            total_nouns = len(full_analysis.get("all_nouns", []))
+            phrase_entities = len(full_analysis.get("phrase_entities", []))
+            org_phrases = len(full_analysis.get("organizational_phrases", []))
+            named_entities = len(full_analysis.get("named_entities", []))
+            technical_terms = len(full_analysis.get("technical_terms", []))
+            unusual_nouns = len(full_analysis.get("unusual_nouns", []))
+            
+            print(f"✅ Enhanced noun and phrase extraction completed:")
+            print(f"   📝 Total nouns: {total_nouns}")
+            print(f"   👥 Multi-word phrases: {phrase_entities}")
+            print(f"   🏛️  Organizational phrases: {org_phrases}")
+            print(f"   👤 Named entities: {named_entities}")
+            print(f"   🔧 Technical terms: {technical_terms}")
+            print(f"   🌟 Unusual terms (LLM): {unusual_nouns}")
+            
+            # Show some example phrases if available
+            if phrase_entities > 0:
+                example_phrases = [noun.text for noun in full_analysis.get("phrase_entities", [])[:3]]
+                print(f"   💡 Example phrases: {', '.join(example_phrases)}")
+            
+            if org_phrases > 0:
+                example_orgs = [noun.text for noun in full_analysis.get("organizational_phrases", [])[:2]]
+                print(f"   🏢 Example organizations: {', '.join(example_orgs)}")
+            
+            return result
+            
+        except Exception as e:
+            logger.warning(f"Noun extraction failed: {e}")
+            return result
 
 
 class LightningMLXOutputManager:
@@ -505,6 +626,12 @@ class LightningMLXBenchmark:
             # Calculate metrics
             processing_ratio = total_time / audio_duration
             speed_multiplier = 1.0 / processing_ratio if processing_ratio > 0 else 0.0
+            
+            # Apply corrections if enabled
+            result = await LightningMLXResultProcessor.apply_corrections(result, self.config)
+            
+            # Extract nouns if enabled
+            result = await LightningMLXResultProcessor.extract_nouns(result, self.config)
             
             # Save results
             LightningMLXOutputManager.save_results(
@@ -662,6 +789,9 @@ class LightningMLXBenchmark:
             speakers_count = len(set(s.get("speaker", "") for s in result.get("segments", [])))
             word_count = len(result.get("text", "").split())
             
+            # Apply corrections if enabled
+            result = await LightningMLXResultProcessor.apply_corrections(result, self.config)
+            
             # Save results
             LightningMLXOutputManager.save_results(
                 result, self.config.audio_file, self.config.output_dir, 
@@ -713,6 +843,96 @@ class LightningMLXBenchmark:
             traceback.print_exc()
             return {"success": False, "error": str(e)}
     
+    async def run_document_extraction_test(self) -> Dict[str, Any]:
+        """Run document noun extraction test on inputdoc.docx"""
+        print("📄 DOCUMENT NOUN EXTRACTION TEST")
+        print("📁 File: inputdoc.docx")
+        print("=" * 60)
+        
+        if not NOUN_EXTRACTION_AVAILABLE:
+            return {"success": False, "error": "Noun extraction not available"}
+        
+        # Check if document exists
+        doc_file = "inputdoc.docx"
+        if not Path(doc_file).exists():
+            return {"success": False, "error": f"Document not found: {doc_file}"}
+        
+        try:
+            from noun_extraction_system import extract_nouns_from_document, NounExtractionConfig
+            
+            print(f"📄 Processing document: {doc_file}")
+            start_time = time.time()
+            
+            # Create configuration for document extraction
+            config = NounExtractionConfig(
+                domain_focus="education",
+                use_local_llm=True,  # Try to use local LLM
+                llm_provider="ollama",  # Prefer Ollama
+                llm_model="llama3.2",
+                extract_unusual_nouns=True,
+                min_frequency=2,
+                filter_duplicates=True
+            )
+            
+            # Extract nouns from document
+            doc_analysis = await extract_nouns_from_document(doc_file, "education", config)
+            extraction_time = time.time() - start_time
+            
+            if "error" in doc_analysis:
+                return {"success": False, "error": doc_analysis["error"]}
+            
+            # Process results
+            content_stats = doc_analysis.get("content_statistics", {})
+            noun_results = doc_analysis.get("noun_analysis", {})
+            insights = doc_analysis.get("insights", {})
+            
+            # Summary statistics
+            total_chars = content_stats.get("total_characters", 0)
+            total_words = content_stats.get("total_words", 0)
+            total_nouns = insights.get("total_unique_nouns", 0)
+            
+            print(f"✅ Document extraction completed in {extraction_time:.2f}s")
+            print(f"📊 Document Analysis:")
+            print(f"   📝 Characters: {total_chars:,}")
+            print(f"   📖 Words: {total_words:,}")
+            print(f"   🔍 Unique nouns: {total_nouns}")
+            
+            # Show noun categories
+            print(f"\n🔍 Noun extraction results:")
+            for category, nouns in noun_results.items():
+                if nouns and category != "all_nouns":
+                    print(f"   {category.replace('_', ' ').title()}: {len(nouns)}")
+                    
+                    # Show special attention to unusual nouns
+                    if category == "unusual_nouns":
+                        print(f"   🌟 Top unusual nouns (LLM identified):")
+                        for noun in nouns[:5]:
+                            print(f"     • {noun.text} (confidence: {noun.confidence:.2f})")
+                    elif len(nouns) > 0:
+                        print(f"     Top terms: {', '.join([n.text for n in nouns[:3]])}")
+            
+            # Save document analysis
+            doc_output = f"inputdoc_analysis_{int(time.time())}.json"
+            from noun_extraction_system import save_noun_analysis
+            save_noun_analysis(doc_analysis, doc_output)
+            
+            return {
+                "success": True,
+                "document": doc_file,
+                "extraction_time": extraction_time,
+                "total_characters": total_chars,
+                "total_words": total_words,
+                "total_nouns": total_nouns,
+                "unusual_nouns_count": len(noun_results.get("unusual_nouns", [])),
+                "output_file": doc_output
+            }
+            
+        except Exception as e:
+            print(f"❌ Document extraction failed: {e}")
+            import traceback
+            traceback.print_exc()
+            return {"success": False, "error": str(e)}
+    
     async def run_complete_benchmark(self):
         """Run complete Lightning MLX benchmark"""
         print("🚀 LIGHTNING WHISPER MLX BENCHMARK")
@@ -727,9 +947,14 @@ class LightningMLXBenchmark:
         validation_result = await self.run_validation_test()
         results.append(("Validation", validation_result))
         
+        # Run document noun extraction test
+        print("\nPhase 2: Document Noun Extraction")
+        doc_result = await self.run_document_extraction_test()
+        results.append(("Document Extraction", doc_result))
+        
         # Run full test only if validation passes
         if validation_result.get("success", False):
-            print("\nPhase 2: Full Test")
+            print("\nPhase 3: Full Test")
             full_result = await self.run_full_test()
             results.append(("Full Test", full_result))
         else:

@@ -1,0 +1,63 @@
+# Optimized Transcription System Requirements
+# Core transcription and MLX dependencies
+lightning-whisper-mlx>=0.0.10
+mlx>=0.25.0
+mlx-lm>=0.20.0
+
+# Audio processing
+soundfile>=0.13.0
+librosa>=0.11.0
+ffmpeg-python>=0.2.0
+
+# Advanced diarization with parallelization support
+pyannote.audio>=3.3.0
+torch>=2.7.0
+torchaudio>=2.7.0
+
+# NLP and noun extraction
+spacy>=3.8.0
+transformers>=4.52.0
+nltk>=3.9.0
+sentencepiece>=0.2.0
+
+# Local LLM support
+ollama>=0.4.8
+
+# Document processing
+python-docx>=1.1.0
+
+# Async and parallel processing
+asyncio-throttle>=1.0.2
+concurrent-futures>=3.1.1
+
+# Performance monitoring
+psutil>=7.0.0
+nvidia-ml-py>=12.560.30  # For NVIDIA GPU monitoring
+
+# Data processing and analysis
+numpy>=2.2.0
+pandas>=2.2.0
+scipy>=1.15.0
+
+# Web requests and APIs
+requests>=2.32.0
+httpx>=0.28.0
+
+# Configuration and utilities
+pydantic>=2.11.0
+typer>=0.16.0
+rich>=14.0.0
+colorlog>=6.9.0
+
+# JSON and serialization
+orjson>=3.10.0  # Fast JSON processing for large results
+
+# Progress tracking
+tqdm>=4.67.0
+
+# Memory optimization
+psutil>=7.0.0
+memory-profiler>=0.61.0
+
+# Additional ML acceleration (optional)
+accelerate>=1.7.0  # Hugging Face acceleration 
